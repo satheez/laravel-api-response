@@ -40,6 +40,9 @@ it('supports configured static top level fields', function () {
     config()->set('api-response.extra_fields', [
         'api_version' => 'v1',
         'service' => 'public-api',
+        'links' => [
+            'docs' => 'https://example.com/docs',
+        ],
     ]);
 
     $response = api_response()->success();
@@ -52,6 +55,9 @@ it('supports configured static top level fields', function () {
         'meta' => [],
         'api_version' => 'v1',
         'service' => 'public-api',
+        'links' => [
+            'docs' => 'https://example.com/docs',
+        ],
     ]);
 });
 
@@ -107,6 +113,18 @@ it('requires static extra field keys to be strings', function () {
     api_response()->success();
 })->throws(InvalidConfigurationException::class, 'Configured extra response field key [int] must be a string.');
 
+it('requires extra fields config to be an array', function () {
+    config()->set('api-response.extra_fields', 'api_version');
+
+    api_response()->success();
+})->throws(InvalidConfigurationException::class, 'Configured extra response fields must be an array.');
+
+it('requires extra field resolver config to be an array', function () {
+    config()->set('api-response.extra_field_resolvers', TestRequestIdResolver::class);
+
+    api_response()->success();
+})->throws(InvalidConfigurationException::class, 'Configured extra response field resolvers must be an array.');
+
 it('requires resolver extra field keys to be strings', function () {
     config()->set('api-response.extra_field_resolvers', [
         TestNumericFieldResolver::class,
@@ -156,6 +174,7 @@ it('returns common success responses with configured messages', function () {
         ->and(api_response()->created()->getData(true)['message'])->toBe('Resource created successfully.')
         ->and(api_response()->updated()->status())->toBe(Response::HTTP_OK)
         ->and(api_response()->updated()->getData(true)['message'])->toBe('Resource updated successfully.')
+        ->and(api_response()->stored()->getData(true)['message'])->toBe('Resource updated successfully.')
         ->and(api_response()->deleted()->status())->toBe(Response::HTTP_OK)
         ->and(api_response()->deleted()->getData(true)['message'])->toBe('Resource deleted successfully.');
 });
@@ -163,10 +182,28 @@ it('returns common success responses with configured messages', function () {
 it('returns common error responses with configured messages', function () {
     expect(api_response()->unauthorized()->status())->toBe(Response::HTTP_UNAUTHORIZED)
         ->and(api_response()->forbidden()->status())->toBe(Response::HTTP_FORBIDDEN)
+        ->and(api_response()->accessDenied()->status())->toBe(Response::HTTP_FORBIDDEN)
         ->and(api_response()->notFound()->status())->toBe(Response::HTTP_NOT_FOUND)
         ->and(api_response()->invalidRequest()->status())->toBe(Response::HTTP_BAD_REQUEST)
         ->and(api_response()->somethingWentWrong()->status())->toBe(Response::HTTP_INTERNAL_SERVER_ERROR)
         ->and(api_response()->validationError(['email' => ['Required']])->status())->toBe(Response::HTTP_UNPROCESSABLE_ENTITY);
+});
+
+it('returns validation errors from string messages', function () {
+    $response = api_response()->validationError('Invalid email');
+
+    expect($response->status())->toBe(Response::HTTP_UNPROCESSABLE_ENTITY)
+        ->and($response->getData(true))->toMatchArray([
+            'message' => 'Invalid email',
+            'errors' => null,
+        ]);
+});
+
+it('returns exception responses with valid and fallback status codes', function () {
+    expect(api_response()->exception(new RuntimeException('Conflict', Response::HTTP_CONFLICT))->status())->toBe(Response::HTTP_CONFLICT)
+        ->and(api_response()->exception(new RuntimeException('Broken', 0))->status())->toBe(Response::HTTP_INTERNAL_SERVER_ERROR)
+        ->and(api_response()->exception(new RuntimeException('Broken'), 'Hidden')->getData(true)['message'])->toBe('Hidden')
+        ->and(api_response()->exception(new RuntimeException('Broken'), status: Response::HTTP_BAD_REQUEST)->status())->toBe(Response::HTTP_BAD_REQUEST);
 });
 
 it('supports headers and meta data on responses', function () {
