@@ -3,6 +3,7 @@
 use Illuminate\Routing\ResponseFactory as LaravelResponseFactory;
 use Illuminate\Support\Facades\Response;
 use Satheez\LaravelApiResponse\Exceptions\InvalidConfigurationException;
+use Satheez\LaravelApiResponse\Exceptions\MacroRegistrationException;
 use Satheez\LaravelApiResponse\Support\ResponseMacroRegistrar;
 
 afterEach(function () {
@@ -98,6 +99,46 @@ it('supports custom macro names', function () {
     ]);
 });
 
+it('ignores malformed runtime macro arguments', function () {
+    LaravelResponseFactory::flushMacros();
+
+    app(ResponseMacroRegistrar::class)->register();
+
+    $response = Response::success(['id' => 1], 'Loaded', 'bad-status', 'bad-headers', 'bad-meta');
+
+    expect($response->status())->toBe(200)
+        ->and($response->headers->has('bad-headers'))->toBeFalse()
+        ->and($response->getData(true))->toMatchArray([
+            'data' => ['id' => 1],
+            'meta' => [],
+        ]);
+});
+
+it('normalizes mixed validation macro arguments', function () {
+    LaravelResponseFactory::flushMacros();
+
+    app(ResponseMacroRegistrar::class)->register();
+
+    $response = Response::validationError([
+        'email' => ['Required', 123],
+        'name' => 'Required',
+        0 => ['Ignored'],
+    ]);
+
+    expect($response->getData(true)['errors'])->toBe([
+        'email' => ['Required'],
+        'name' => 'Required',
+    ]);
+});
+
+it('defaults malformed validation macro arguments to an empty error bag', function () {
+    LaravelResponseFactory::flushMacros();
+
+    app(ResponseMacroRegistrar::class)->register();
+
+    expect(Response::validationError(new stdClass)->getData(true)['errors'])->toBe([]);
+});
+
 it('rejects malformed macro config entries', function () {
     LaravelResponseFactory::flushMacros();
     config()->set('api-response.macros.names.success', new stdClass);
@@ -105,9 +146,36 @@ it('rejects malformed macro config entries', function () {
     app(ResponseMacroRegistrar::class)->register();
 })->throws(InvalidConfigurationException::class, 'Configured response macro name for [success] must be a string, [stdClass] given.');
 
+it('rejects non array macro name config', function () {
+    LaravelResponseFactory::flushMacros();
+    config()->set('api-response.macros.names', 'success');
+
+    app(ResponseMacroRegistrar::class)->register();
+})->throws(InvalidConfigurationException::class, 'Configured response macro names must be an array.');
+
+it('rejects non string macro keys', function () {
+    LaravelResponseFactory::flushMacros();
+    config()->set('api-response.macros.names', [
+        'success',
+    ]);
+
+    app(ResponseMacroRegistrar::class)->register();
+})->throws(InvalidConfigurationException::class, 'Configured response macro key [int] must be a string.');
+
 it('rejects empty macro names', function () {
     LaravelResponseFactory::flushMacros();
     config()->set('api-response.macros.names.success', '');
 
     app(ResponseMacroRegistrar::class)->register();
 })->throws(InvalidConfigurationException::class, 'Configured response macro name for [success] cannot be empty.');
+
+it('rejects macro config keys without matching factory methods', function () {
+    LaravelResponseFactory::flushMacros();
+    config()->set('api-response.macros.names.missing', 'missing');
+
+    app(ResponseMacroRegistrar::class)->register();
+})->throws(MacroRegistrationException::class, 'Cannot register response macro for missing method [missing].');
+
+it('rejects direct calls to unknown factory macro methods', function () {
+    app(ResponseMacroRegistrar::class)->callFactory('missing', []);
+})->throws(MacroRegistrationException::class, 'Cannot register response macro for missing method [missing].');
