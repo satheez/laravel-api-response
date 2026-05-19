@@ -1,0 +1,76 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        laravel: ['12.*', '13.*']
+        include:
+          - laravel: '12.*'
+            testbench: '^10.0'
+          - laravel: '13.*'
+            testbench: '^11.0'
+
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip
+          coverage: none
+
+      - name: Configure Laravel version
+        run: composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Run tests
+        run: composer test
+
+      - name: Audit dependencies
+        run: composer audit
+
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, curl, libxml, mbstring, zip
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Validate Composer metadata
+        run: composer validate --strict
+
+      - name: Check formatting
+        run: composer format-test
+
+      - name: Run static analysis
+        run: composer analyse
+
+      - name: Check coverage
+        run: composer test-coverage
