@@ -1,151 +1,279 @@
+# Laravel API Response
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/support-ukraine.svg?t=1" />](https://supportukrainenow.org)
+[![Tests](https://github.com/satheez/laravel-api-response/actions/workflows/tests.yml/badge.svg)](https://github.com/satheez/laravel-api-response/actions/workflows/tests.yml)
+[![Packagist Version](https://img.shields.io/packagist/v/satheez/laravel-api-response.svg?style=flat-square)](https://packagist.org/packages/satheez/laravel-api-response)
+[![Total Downloads](https://img.shields.io/packagist/dt/satheez/laravel-api-response.svg?style=flat-square)](https://packagist.org/packages/satheez/laravel-api-response)
 
-# Standard API response class
-
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/satheez/api-response.svg?style=flat-square)](https://packagist.org/packages/satheez/api-response)
-[![GitHub Tests Action Status](https://img.shields.io/github/workflow/status/satheez/api-response/run-tests?label=tests)](https://github.com/satheez/api-response/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://img.shields.io/github/workflow/status/satheez/api-response/Check%20&%20fix%20styling?label=code%20style)](https://github.com/satheez/api-response/actions?query=workflow%3A"Check+%26+fix+styling"+branch%3Amain)
-[![Total Downloads](https://img.shields.io/packagist/dt/satheez/api-response.svg?style=flat-square)](https://packagist.org/packages/satheez/api-response)
-
-This is where your description should go. Limit it to a paragraph or two. Consider adding a small example.
+Laravel API Response provides small, consistent helpers for returning JSON API responses from Laravel applications.
 
 ## Installation
 
-You can install the package via composer:
+Install the package with Composer:
 
 ```bash
-composer require satheez/api-response
+composer require satheez/laravel-api-response
 ```
 
-You can publish the config file with:
+Publish the config file when you need to customize messages or add fields:
 
 ```bash
 php artisan vendor:publish --tag="api-response-config"
 ```
 
+Publish translations when you need localized package messages:
+
+```bash
+php artisan vendor:publish --tag="api-response-translations"
+```
+
+## Response Envelope
+
+Every response uses the same base structure:
+
+```json
+{
+    "success": true,
+    "message": "Request completed successfully.",
+    "data": null,
+    "errors": null,
+    "meta": []
+}
+```
+
+Error responses keep the same keys:
+
+```json
+{
+    "success": false,
+    "message": "The given data was invalid.",
+    "data": null,
+    "errors": {
+        "email": ["The email field is required."]
+    },
+    "meta": []
+}
+```
+
 ## Usage
 
-Example
+Use the helper, shorter compatibility helper, package facade, or Laravel response macros:
 
 ```php
-<?php
-
-namespace App\Http\Controllers\Api;
-
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Response;
+use Satheez\LaravelApiResponse\Facades\ApiResponse;
 
-class UserController extends Controller
+final class UserController
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return JsonResponse
-     */
-    public function index()
+    public function store(StoreUserRequest $request): JsonResponse
     {
-        // todo, paginate the user data
-        return api()->success(User::all()->toArray());
+        $user = User::query()->create($request->validated());
+
+        return api_response()->created(
+            data: new UserResource($user),
+            message: 'User created successfully.',
+        );
     }
 
-
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @return JsonResponse
-     */
-    public function store(Request $request): JsonResponse
+    public function show(User $user): JsonResponse
     {
-        // todo validate the request data
-        $user = User::create($request->all());
-        return api()->created($user->toArray());
-    }
-
-    /**
-     * Display the specified resource.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function show($id): JsonResponse
-    {
-        $user = User::find($id);
-
-        // todo update process
-        return !empty($user)
-            ? api()->success($user->toArray())
-            : api()->notFound();
-    }
-
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function update(Request $request, $id): JsonResponse
-    {
-        // todo update process
-        return api()->stored(User::find($id)->toArray());
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function destroy($id): JsonResponse
-    {
-        User::destroy($id);
-        return api()->deleted();
+        return Response::success(new UserResource($user));
     }
 }
 ```
 
-## Available methods
+Equivalent response styles:
 
-### Success Methods :v:
-| Method | Status code | Description |
-|---|---|---|
-|api()->success()|200|Successful get, patch (return a JSON object)|
-|api()->created()|201|Successful record create (return a JSON object)|
-|api()->updated()|200|Successful record update (return a JSON object)|
+```php
+api_response()->success(['status' => 'ok']);
+api()->error('Invalid request');
+ApiResponse::created(['id' => 1]);
+Response::success(['status' => 'ok']);
+response()->error('Invalid request');
+```
 
-### Error Status :shit:
-| Method | Status code | Description |
-|---|---|---|
-|api()->unauthorized()|401|Error Not authenticated|
-|api()->invalidRequest()|400|Error invalid request|
-|api()->accessDenied()|403|Error Not authorized (Authenticated, but no permissions)|
-|api()->forbidden()|403|Error Not authorized (Authenticated, but no permissions)|
-|api()->notFound()|404|Error Not Found|
-|api()->validationError($message)|422|Error Validation|
-|api()->somethingWentWrong()|500|Internal error|
-|api()->exception($exception)||Error with exception|
+## Fluent Builder
 
-### Extra methods :man:
-| Method | Status code | Description |
-|---|---|---|
-|api()->error($message, $httpCode)|422 (default)|Custom Error response|
-|api()->success($data, $message, $httpCode)|200 (default)|Custom Success response|
+```php
+return api_response()
+    ->builder()
+    ->success()
+    ->message('Loaded')
+    ->data(['id' => 1])
+    ->meta(['page' => 1])
+    ->header('X-Trace-Id', $traceId)
+    ->respond();
+```
 
+## Available Methods
 
-## Testing
+| Method | Status | Purpose |
+| --- | ---: | --- |
+| `success($data = null, $message = null, $status = 200, $headers = [], $meta = [])` | Custom | General success response |
+| `created($data = null, $message = null, $headers = [], $meta = [])` | 201 | Resource created response |
+| `updated($data = null, $message = null, $headers = [], $meta = [])` | 200 | Resource updated response |
+| `stored($data = null, $message = null, $headers = [], $meta = [])` | 200 | Alias for updated/stored responses |
+| `deleted($data = null, $message = null, $headers = [], $meta = [])` | 200 | Resource deleted response |
+| `error($message, $status = 422, $errors = null, $headers = [], $meta = [])` | Custom | General error response |
+| `validationError($errors, $message = null, $headers = [], $meta = [])` | 422 | Validation error response |
+| `unauthorized($message = null)` | 401 | Unauthenticated response |
+| `forbidden($message = null)` | 403 | Unauthorized action response |
+| `accessDenied($message = null)` | 403 | Alias for forbidden responses |
+| `notFound($message = null)` | 404 | Missing resource response |
+| `invalidRequest($message = null)` | 400 | Bad request response |
+| `somethingWentWrong($message = null)` | 500 | Server error response |
+| `exception($exception, $message = null, $status = null)` | Custom | Exception response |
+| `resource($resource, $message = null, $status = 200, $headers = [], $meta = [])` | Custom | JSON resource response |
+| `collection($collection, $resourceClass = null, $message = null, $status = 200, $headers = [], $meta = [])` | Custom | Resource collection response |
+| `paginated($paginator, $resourceClass = null, $message = null, $status = 200, $headers = [], $meta = [])` | Custom | Paginated resource response |
+
+## Resources And Pagination
+
+```php
+return api_response()->resource(new UserResource($user));
+
+return api_response()->collection($users, UserResource::class);
+
+return api_response()->paginated(
+    paginator: User::query()->paginate(),
+    resourceClass: UserResource::class,
+);
+```
+
+Paginated responses keep items in `data` and move pagination details to `meta.pagination`.
+
+## Extra Top-Level Fields
+
+Add config-cache-safe static fields to every response in `config/api-response.php`:
+
+```php
+'extra_fields' => [
+    'api_version' => 'v1',
+    'service' => 'public-api',
+],
+```
+
+These fields are appended at the root of the response:
+
+```json
+{
+    "success": true,
+    "message": "Request completed successfully.",
+    "data": null,
+    "errors": null,
+    "meta": [],
+    "api_version": "v1",
+    "service": "public-api"
+}
+```
+
+Static values must be scalar, null, or arrays made from those values. Reserved fields cannot be overridden: `success`, `message`, `data`, `errors`, and `meta`.
+Field keys must be strings. Invalid extra-field config fails with a package exception.
+
+## Dynamic Extra Fields
+
+Use resolver classes for dynamic values so your config remains cacheable. Resolvers receive a `ResponseContext`.
+
+```php
+namespace App\Support;
+
+use Illuminate\Http\Request;
+use Satheez\LaravelApiResponse\Contracts\ExtraFieldResolver;
+use Satheez\LaravelApiResponse\Data\ResponseContext;
+
+final readonly class RequestIdField implements ExtraFieldResolver
+{
+    public function __construct(private Request $request) {}
+
+    public function resolve(ResponseContext $context): array
+    {
+        return [
+            'request_id' => $this->request->headers->get('X-Request-Id'),
+            'response_status' => $context->status,
+        ];
+    }
+}
+```
+
+Register the resolver:
+
+```php
+'extra_field_resolvers' => [
+    App\Support\RequestIdField::class,
+],
+```
+
+Resolver classes must exist, implement `ExtraFieldResolver`, and return string field keys.
+
+## Response Macros
+
+Macros are enabled by default and are registered on Laravel's response factory. Existing app macros are not replaced unless configured.
+
+```php
+use Illuminate\Support\Facades\Response;
+
+Response::success($data);
+response()->validationError($errors);
+```
+
+See [docs/macros.md](docs/macros.md) for collision behavior and custom names.
+
+## Localization
+
+Default messages use Laravel translation keys in `config/api-response.php`:
+
+```php
+'messages' => [
+    'success' => [
+        'default' => 'api-response::messages.success.default',
+    ],
+],
+```
+
+After publishing translations, add or edit files under `lang/vendor/api-response/{locale}/messages.php`.
+Laravel will resolve messages using the active application locale.
+
+You can still use literal strings in config:
+
+```php
+'messages' => [
+    'success' => [
+        'default' => 'Everything is ready.',
+    ],
+],
+```
+
+## Optional Exception Handling
+
+The package does not take over exception rendering automatically. Opt in from `bootstrap/app.php`:
+
+```php
+use Satheez\LaravelApiResponse\Support\ExceptionHandling;
+
+->withExceptions(function (Exceptions $exceptions): void {
+    ExceptionHandling::register($exceptions);
+})
+```
+
+See [docs/errors.md](docs/errors.md) for mappings and server error behavior.
+
+## Testing This Package
 
 ```bash
 composer test
+composer test-coverage
+composer analyse
+composer format-test
+composer audit
 ```
-## Credits
 
-- [Satheez](https://github.com/Satheez)
-- [All Contributors](../../contributors)
+## Upgrading
+
+The rewrite changes the package name, namespace, and response envelope. See [docs/upgrade.md](docs/upgrade.md).
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The MIT License. See [LICENSE.md](LICENSE.md).
