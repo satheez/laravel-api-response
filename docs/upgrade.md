@@ -99,3 +99,19 @@ public function resolve(ResponseContext $context): array
 ### Response Macros
 
 Laravel response macros are enabled by default. Existing app macros are not replaced unless `macros.replace_existing` is set to `true`.
+
+### Checklist
+
+- [ ] Replace `satheez/api-response` with `satheez/laravel-api-response` in `composer.json`
+- [ ] Update namespace from `Satheez\ApiResponse` to `Satheez\LaravelApiResponse`
+- [ ] Update facade imports to `Satheez\LaravelApiResponse\Facades\ApiResponse`
+- [ ] Republish config with `--force`
+- [ ] Update API clients to read `errors` instead of `error`
+- [ ] Update API clients to expect `meta` as an array
+- [ ] Publish translations if using localized messages
+- [ ] Update any `ExtraFieldResolver` implementations to accept `ResponseContext`
+- [ ] Test all API endpoints for response shape changes
+
+---
+
+**Standalone page** — Return to [README](../README.md)
